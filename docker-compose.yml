@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  discord-meetup-bot:
+    container_name: discord-meetup-bot
+    # Build locally:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    # Or use the pre-built image from GitHub:
+    # image: ghcr.io/your-username/discord-meetup-rsvp-bot:latest
+    restart: unless-stopped
+    # Use configurable UID and GID from environment variables
+    user: ${UID:-1000}:${GID:-1000}
+    environment:
+      # Required configuration
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - GUILD_ID=${GUILD_ID}
+      - RSVP_CHANNEL_ID=${RSVP_CHANNEL_ID}
+      - MEETUP_API_KEY=${MEETUP_API_KEY}
+      
+      # Optional configurations
+      - DATA_DIR=/app/data
+      - POLL_INTERVAL=${POLL_INTERVAL:-60000}
+      - TZ=${TZ:-UTC}
+      - NODE_ENV=production
+      - HEALTHCHECK_PORT=8080
+    volumes:
+      - ./data:/app/data
+    # Health check matches the one defined in Dockerfile
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const options={timeout:5000,host:'localhost',port:process.env.HEALTHCHECK_PORT||8080,path:'/health'};const req=http.request(options,(res)=>{process.exit(res.statusCode === 200 ? 0 : 1)});req.on('error',()=>process.exit(1));req.end()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    # Resource limits to prevent container from using too many resources
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M

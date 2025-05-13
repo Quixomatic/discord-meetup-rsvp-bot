@@ -1,0 +1,43 @@
+FROM node:18-alpine
+
+# Accept UID and GID as build arguments with defaults
+ARG UID=1000
+ARG GID=1000
+
+# Set working directory
+WORKDIR /app
+
+# Create a user with the specified UID and GID (Alpine version)
+RUN mkdir -p /app/data && \
+    addgroup -g ${GID} botuser && \
+    adduser -u ${UID} -G botuser -s /bin/sh -D botuser && \
+    chown -R botuser:botuser /app
+
+# Copy package files first (for better caching)
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy application code
+COPY --chown=botuser:botuser . .
+
+# Set environment variables
+ENV NODE_ENV=production \
+    DATA_DIR=/app/data
+
+# Switch to non-root user
+USER botuser
+
+# Set up health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "const http=require('http');const options={timeout:5000,host:'localhost',port:process.env.HEALTHCHECK_PORT||8080,path:'/health'};const req=http.request(options,(res)=>{process.exit(res.statusCode === 200 ? 0 : 1)});req.on('error',()=>process.exit(1));req.end()" || exit 1
+
+# Run the application
+CMD ["node", "index.js"]
+
+# Add labels for better container management
+LABEL org.opencontainers.image.source="https://github.com/username/discord-meetup-rsvp-bot" \
+      org.opencontainers.image.description="Discord bot that tracks Meetup events and RSVPs" \
+      org.opencontainers.image.licenses="MIT"
